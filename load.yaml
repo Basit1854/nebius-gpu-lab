@@ -1,0 +1,25 @@
+# Keeps the GPU busy with large matrix multiplies so the dashboard has something to show
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-load
+spec:
+  restartPolicy: Never
+  tolerations:
+    - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+  containers:
+    - name: load
+      image: pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+      resources:
+        limits: { nvidia.com/gpu: 1 }
+      command: ["python", "-c"]
+      args:
+        - |
+          import torch, time
+          a = torch.randn(8192, 8192, device="cuda", dtype=torch.float16)
+          b = torch.randn(8192, 8192, device="cuda", dtype=torch.float16)
+          end = time.time() + 3600
+          while time.time() < end:
+              for _ in range(50):
+                  c = a @ b
+              torch.cuda.synchronize()

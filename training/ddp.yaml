@@ -1,0 +1,62 @@
+# Two-node data-parallel training: one GPU on each of two nodes, connected over plain
+# Ethernet (the 1-GPU presets have no InfiniBand). Needs the GPU node group at 2 nodes.
+# Pod ddp-0 is rank 0 and hosts the rendezvous; ddp-1 finds it at ddp-0.ddp via the
+# headless Service below.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddp
+spec:
+  clusterIP: None
+  selector: { job-name: ddp }
+  ports:
+    - { name: rendezvous, port: 29500 }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ddp
+spec:
+  completionMode: Indexed
+  completions: 2
+  parallelism: 2
+  backoffLimit: 0
+  template:
+    spec:
+      subdomain: ddp
+      restartPolicy: Never
+      tolerations:
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+      affinity:
+        podAntiAffinity:          # force the two ranks onto different nodes
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: { job-name: ddp }
+      containers:
+        - name: trainer
+          image: pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+          command: ["bash", "-c"]
+          args:
+            - >-
+              torchrun --nnodes=2 --nproc_per_node=1
+              --node_rank=$JOB_COMPLETION_INDEX
+              --master_addr=ddp-0.ddp --master_port=29500
+              /scripts/train.py
+          env:
+            - { name: NCCL_DEBUG, value: "INFO" }
+            - { name: NCCL_SOCKET_IFNAME, value: "eth0" }
+            - { name: NCCL_TIMEOUT, value: "180" }
+            - { name: BATCH, value: "16" }
+            - { name: NUM_WORKERS, value: "4" }
+            - { name: STEPS, value: "100000" }
+          resources:
+            limits: { nvidia.com/gpu: 1 }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+            - { name: dshm, mountPath: /dev/shm }
+      volumes:
+        - name: scripts
+          configMap: { name: train-script }
+        - name: dshm
+          emptyDir: { medium: Memory, sizeLimit: 4Gi }

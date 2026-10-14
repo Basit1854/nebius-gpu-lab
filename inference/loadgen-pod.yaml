@@ -1,0 +1,17 @@
+# A long-lived client pod on the CPU node. Run load from it with kubectl exec, for example:
+#   kubectl exec loadgen -- env CONCURRENCY=32 python /scripts/loadgen.py
+# Prerequisite: kubectl create configmap loadgen-script --from-file=inference/loadgen.py
+apiVersion: v1
+kind: Pod
+metadata:
+  name: loadgen
+spec:
+  containers:
+    - name: client
+      image: python:3.12-slim
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - { name: scripts, mountPath: /scripts }
+  volumes:
+    - name: scripts
+      configMap: { name: loadgen-script }

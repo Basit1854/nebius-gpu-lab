@@ -1,0 +1,61 @@
+# vLLM serving a small open model (Qwen2.5-1.5B-Instruct, about 3 GB of weights in bf16).
+# The ServiceMonitor makes Prometheus scrape vLLM's /metrics endpoint.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  labels: { app: vllm }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: vllm }
+  template:
+    metadata:
+      labels: { app: vllm }
+    spec:
+      tolerations:
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.10.0
+          args:
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            - --max-model-len=4096
+            - --gpu-memory-utilization=0.90
+            - --port=8000
+          ports:
+            - { name: http, containerPort: 8000 }
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 5
+          resources:
+            limits: { nvidia.com/gpu: 1 }
+          volumeMounts:
+            - { name: hf-cache, mountPath: /root/.cache/huggingface }
+            - { name: dshm, mountPath: /dev/shm }
+      volumes:
+        - name: hf-cache
+          emptyDir: {}          # model is downloaded again every time the pod starts (on purpose, see 4.8)
+        - name: dshm
+          emptyDir: { medium: Memory, sizeLimit: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  labels: { app: vllm }
+spec:
+  selector: { app: vllm }
+  ports:
+    - { name: http, port: 8000, targetPort: 8000 }
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vllm
+  labels: { app: vllm }
+spec:
+  selector:
+    matchLabels: { app: vllm }
+  endpoints:
+    - { port: http, path: /metrics, interval: 15s }

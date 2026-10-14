@@ -1,0 +1,11 @@
+# Checkpoint volume. No storageClassName, so the cluster's default class is used.
+# Run `kubectl get storageclass` first and note which one is marked (default).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: train-ckpt
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi

@@ -1,0 +1,42 @@
+# Single-GPU training job. Change the env values to break it one way at a time.
+# Prerequisites: kubectl create configmap train-script --from-file=training/train.py
+#                kubectl apply -f training/pvc.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels: { app: train }
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+      containers:
+        - name: trainer
+          image: pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+          command: ["python", "/scripts/train.py"]
+          env:
+            - { name: BATCH, value: "16" }
+            - { name: NUM_WORKERS, value: "4" }
+            - { name: DATA_MS, value: "0" }
+            - { name: STEPS, value: "3000" }
+            - { name: CKPT_DIR, value: "/ckpt" }
+            - { name: CKPT_EVERY, value: "0" }
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              # cpu: "1"          # uncomment for the CPU-throttling break in 3.4
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+            - { name: ckpt, mountPath: /ckpt }
+            - { name: dshm, mountPath: /dev/shm }   # DataLoader workers pass batches through shared memory
+      volumes:
+        - name: scripts
+          configMap: { name: train-script }
+        - name: ckpt
+          persistentVolumeClaim: { claimName: train-ckpt }
+        - name: dshm
+          emptyDir: { medium: Memory, sizeLimit: 4Gi }

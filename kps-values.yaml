@@ -1,0 +1,8 @@
+# kube-prometheus-stack: Prometheus + Grafana + Alertmanager
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false   # pick up ServiceMonitors from every namespace
+    ruleSelectorNilUsesHelmValues: false             # pick up PrometheusRules from every namespace
+    scrapeInterval: 15s
+grafana:
+  adminPassword: CHANGE_ME

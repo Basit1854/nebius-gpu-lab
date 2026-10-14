@@ -1,0 +1,17 @@
+# GPU Operator on a Nebius node group created WITHOUT the drivers preset.
+# Here the operator owns every GPU layer on the node: driver, container toolkit,
+# device plugin, GPU Feature Discovery, and the DCGM exporter. One owner per layer.
+driver:
+  enabled: true
+toolkit:
+  enabled: true
+devicePlugin:
+  enabled: true
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true        # needs the ServiceMonitor CRD, so install kube-prometheus-stack first
+    interval: 15s
+daemonsets:
+  tolerations:
+    - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
